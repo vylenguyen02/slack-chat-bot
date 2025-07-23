@@ -16,7 +16,7 @@ def read_message():
     result = client.conversations_history(
         channel=conversation_id,
         inclusive=True,
-        limit=1
+        limit=12
     )
     n = 0
     while n > 0:

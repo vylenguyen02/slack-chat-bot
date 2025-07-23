@@ -22,16 +22,13 @@ class TextHandlingService:
         all_splits = text_splitter.split_text(docs)
         return all_splits
 
-    def embed_documents(self, all_splits, embedder, collection, search_index):
-        vectorstore = MongoDBAtlasVectorSearch.from_texts(
-                    texts=all_splits,
-                    embedding=embedder,
-                    collection=collection,
-                    index_name=search_index
-                )
+    def embed_documents(self, all_splits, vectorstore):
+        # Assume vectorstore is passed in, like embed_documents(..., vectorstore)
         ids=[str(val) for val in range(len(all_splits))],
-        vectorstore.create_vector_search_index(dimensions=3072)
-        vectorstore.add_texts(all_splits,ids=ids[0])
+
+        vectorstore.add_texts(all_splits, ids=ids[0])
+
+        
     
     
     

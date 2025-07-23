@@ -36,7 +36,7 @@ embedder = OpenAIEmbeddings(
         base_url=os.environ['AZURE_OPENAI_ENDPOINT']
     )
 
-model = ChatOpenAI(
+llm = ChatOpenAI(
         base_url=os.environ["AZURE_OPENAI_ENDPOINT"],
         model=os.environ["AZURE_OPENAI_COMP_DEPLOYMENT_NAME"],
         api_key=os.environ["OPENAI_API_KEY"]
@@ -51,50 +51,69 @@ vectorstore = MongoDBAtlasVectorSearch(
 
 pdf_path = "docs/"
 
-def main():
+async def main():
     # PART 1: DATA PROCESSING
-    prompt_text = """You are an assistant tasked with summarizing tables and text. \
-Give a concise summary of the table or text. Table or text chunk: {element} """
-    prompt = ChatPromptTemplate.from_template(prompt_text)
-    self_service = FileHandlingService(model=model, pdf_path=pdf_path, embedder=embedder, vectorstore=vectorstore)
+    self_service = FileHandlingService(llm, "docs/", embedder, collection, search_index)
     if self_service.folder_has_any_file():
-        for file in os.listdir(self_service.pdf_path):
-            if os.path.isfile(pdf_path+file):
-                docs = self_service.loading(pdf_path=pdf_path, filename=file)
-                table_elements, text_elements, img_summaries= self_service.splitting(docs)
-                self_service.embed_documents(prompt_text, table_elements, text_elements, img_summaries, prompt)
-                os.remove(pdf_path+file)
+            for file in os.listdir(self_service.pdf_path):
+                new_file_path = os.path.join(self_service.pdf_path, file)
+                if os.path.isfile(new_file_path):
+                    docs = await self_service.loading(new_file_path)
+                    all_splits = self_service.splitting(docs)
+                    vectorstore = self_service.embed_documents(all_splits, embedder, collection, search_index)
+                    os.remove(new_file_path)
+    else:
+        vectorstore = MongoDBAtlasVectorSearch(
+            collection=collection,
+            embedding=embedder,  # same embedding model used when saving
+            index_name=search_index,
+            relevance_score_fn="cosine"
+        )
     # PART 2: TAKE USER INPUT
-    message = read_message()
+    input_message = read_message()
 
     # PART 3: SAVE USER INPUT ON THE CLOUD
-    text_handling = TextHandlingService()
-    text = text_handling.splitting(message)
-    text_handling.embed_documents(text, embedder, collection, search_index)
-    
-    # PART 4: PROCESS USER INPUT 
-    tools = ToolNode([self_service.make_retrieve(vectorstore)])
+    import asyncio
 
-    graph = self_service.graph_building(tools, vectorstore)
+
+async def main():
+    self_service = FileHandlingService(llm, "docs/", embedder, collection, search_index)
+    if self_service.folder_has_any_file():
+            for file in os.listdir(self_service.pdf_path):
+                new_file_path = os.path.join(self_service.pdf_path, file)
+                if os.path.isfile(new_file_path):
+                    docs = await self_service.loading(new_file_path)
+                    all_splits = self_service.splitting(docs)
+                    vectorstore_db = self_service.embed_documents(all_splits, embedder, collection, search_index)
+                    os.remove(new_file_path)
+    else:
+        vectorstore_db = MongoDBAtlasVectorSearch(
+            collection=collection,
+            embedding=embedder,  # same embedding model used when saving
+            index_name=search_index,
+            relevance_score_fn="cosine"
+        )
+    
+    message = read_message()
+    tools = ToolNode([self_service.make_retrieve(vectorstore_db)])
+
+    graph = self_service.graph_building(tools, vectorstore_db)
+    final_ai_message = None
     for step in graph.stream(
-    {"messages": [{"role": "user", "content": message}]},
-    stream_mode="values",
-):
-        for msg in step.get("messages", []):
+        { "messages": [{"role": "user", "content": message}]},
+        stream_mode="values",
+    ):
+        for msg in step["messages"]:
             if isinstance(msg, AIMessage):
-                final_answer = msg.content
-                print(final_answer)
-    hello = final_answer
+                final_ai_message = msg.content
 
     slack_client = WebClient(token=os.environ["BOT_USER_OAUTH_TOKEN"])
 
     response = slack_client.chat_postMessage(
         channel="#general",
-        text=hello
+        text=final_ai_message
     )
-    print(response)
-    return 0
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
