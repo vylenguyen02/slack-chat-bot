@@ -18,8 +18,14 @@ def read_message():
         inclusive=True,
         limit=1
     )
-
-    message = result["messages"][0]
+    n = 0
+    while n > 0:
+        message = result["messages"][n]
+        if "user" in message:
+            break         
+        else: 
+            n += 1    
+    message = result["messages"][n]
 # Print message text
     return message["text"]
 
@@ -29,3 +35,5 @@ def respond_message(text):
             text=text
     )
     print(response)
+
+read_message()

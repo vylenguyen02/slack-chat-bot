@@ -1,6 +1,7 @@
 from service.read_message import read_message, respond_message
 import asyncio
 from service.ai_processing import FileHandlingService
+from service.text_processing import TextHandlingService
 from langchain_openai import OpenAIEmbeddings  
 from pymongo import MongoClient
 from langchain_openai import ChatOpenAI
@@ -64,9 +65,14 @@ Give a concise summary of the table or text. Table or text chunk: {element} """
                 self_service.embed_documents(prompt_text, table_elements, text_elements, img_summaries, prompt)
                 os.remove(pdf_path+file)
     # PART 2: TAKE USER INPUT
-    # while 1:
     message = read_message()
-    # PART 3: PROCESS USER INPUT 
+
+    # PART 3: SAVE USER INPUT ON THE CLOUD
+    text_handling = TextHandlingService()
+    text = text_handling.splitting(message)
+    text_handling.embed_documents(text, embedder, collection, search_index)
+    
+    # PART 4: PROCESS USER INPUT 
     tools = ToolNode([self_service.make_retrieve(vectorstore)])
 
     graph = self_service.graph_building(tools, vectorstore)
