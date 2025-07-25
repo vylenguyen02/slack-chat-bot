@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-
+from service.ai_vision import ai_vision
 load_dotenv()
 
 # token = os.getenv("OPENAI_API_KEY") 
@@ -19,21 +19,17 @@ def read_message():
         limit=12
     )
     n = 0
-    while n > 0:
+    # Check if the message is sent by user
+    while n >= 0:
         message = result["messages"][n]
         if "user" in message:
             break         
         else: 
-            n += 1    
+            n -= 1    
     message = result["messages"][n]
-# Print message text
-    return message["text"]
 
-def respond_message(text):
-    response = client.chat_postMessage(
-            channel="#general",
-            text=text
-    )
-    print(response)
-
-read_message()
+    # Check for user input
+    if message.get('text') != "" and message.get('files') == None:
+        return message.get("text")
+    else:
+        return ai_vision(message, message.get('text'))

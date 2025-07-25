@@ -1,7 +1,7 @@
-from service.read_message import read_message, respond_message
+from service.read_message import read_message
 import asyncio
 from service.ai_processing import FileHandlingService
-from service.text_processing import TextHandlingService
+
 from langchain_openai import OpenAIEmbeddings  
 from pymongo import MongoClient
 from langchain_openai import ChatOpenAI
@@ -29,7 +29,7 @@ db = os.environ["DB_NAME"]
 collection_name = os.environ["COLLECTION_NAME"]
 search_index = os.environ["ATLAS_VECTOR_SEARCH_INDEX_NAME"]
 collection = client[db][collection_name]
-
+conversation_id = os.environ["CONVERSATION_ID"]
 embedder = OpenAIEmbeddings(
         model="azure-text-embedding-3-large",
         api_key=os.environ["OPENAI_API_KEY"],
@@ -95,10 +95,12 @@ async def main():
         )
     
     message = read_message()
+    if message == 0:
+        return 0
     tools = ToolNode([self_service.make_retrieve(vectorstore_db)])
+    
 
     graph = self_service.graph_building(tools, vectorstore_db)
-    final_ai_message = None
     for step in graph.stream(
         { "messages": [{"role": "user", "content": message}]},
         stream_mode="values",
@@ -110,10 +112,10 @@ async def main():
     slack_client = WebClient(token=os.environ["BOT_USER_OAUTH_TOKEN"])
 
     response = slack_client.chat_postMessage(
-        channel="#general",
+        channel=conversation_id,
         text=final_ai_message
     )
-
+    print(response)
 
 if __name__ == "__main__":
     asyncio.run(main())
