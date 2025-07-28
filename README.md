@@ -45,7 +45,7 @@ git clone https://github.com/your-username/slack-chat-bot.git
 cd slack-chat-bot
 ```
 
-### 2. Create ```bash.env``` File
+### 2. Create ```bash .env``` File
 ``` bash 
 env file
 Copy code
