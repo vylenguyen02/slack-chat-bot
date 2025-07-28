@@ -1,14 +1,19 @@
-import requests
 import os
 from dotenv import load_dotenv
 from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
 from service.ai_vision import ai_vision
 load_dotenv()
 
-# token = os.getenv("OPENAI_API_KEY") 
-conversation_id = "C031LPUMS4S"
+# FIXED PARAM DECLARTION
+conversation_id = os.environ["CONVERSATION_ID"]
 client = WebClient(token=os.environ["BOT_USER_OAUTH_TOKEN"])
+
+# read_message
+# This function reads user's input
+# Param: None
+# Return: 
+# - the value of the key 'text' in the message dictionary - string value if input is text
+# - if value is picture, return None but it calls to ai_vision to process the picture.
 
 def read_message():
     # Call the conversations.history method using the WebClient
@@ -29,7 +34,15 @@ def read_message():
     message = result["messages"][n]
 
     # Check for user input
+
+    # If user input is text, return string value
     if message.get('text') != "" and message.get('files') == None:
         return message.get("text")
+    
+    # If user input is picture with empty text value
+    elif message.get('text') == "":
+        return ai_vision(message, "")
+    
+    # If user input is picture with text value
     else:
         return ai_vision(message, message.get('text'))
