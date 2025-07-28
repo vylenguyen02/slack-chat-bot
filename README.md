@@ -50,8 +50,6 @@ cd slack-chat-bot
 
 ### 2. Create env file
 ``` bash 
-env file
-Copy code
 OPENAI_API_KEY=your_openai_api_key
 SLACK_BOT_TOKEN=your_slack_bot_token
 SLACK_APP_TOKEN=your_slack_app_token
