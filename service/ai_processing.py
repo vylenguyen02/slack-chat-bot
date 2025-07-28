@@ -19,17 +19,16 @@ class State(TypedDict):
 # FileHandlingService
 # The class processes files and generate answers for user's input
 class FileHandlingService:
-    """The class handles file by loading, splitting, embedding, and retrieving.
-    The class then generate tool call to generate questions with retrieval or respond 
-    Lastly, the class uses graph to 
+    # The class handles file by loading, splitting, embedding, and retrieving.
+    # The class then generate tool call to generate questions with retrieval or respond 
+    # Lastly, the class uses graph to 
 
-    Attributes:
-        llm: A boolean indicating if we like SPAM or not.
-        pdf_path: A string pointing to the folder storing files
-        embedder: An object that declares which AI tool will be used in this program
-        collection: A string containing the name of collection storing our embedded files
-        search_index: A string containing the name of our search index on MongoDBAtlas
-    """
+    # Attributes:
+        # llm: A boolean indicating if we like SPAM or not.
+        # pdf_path: A string pointing to the folder storing files
+        # embedder: An object that declares which AI tool will be used in this program
+        # collection: A string containing the name of collection storing our embedded files
+        # search_index: A string containing the name of our search index on MongoDBAtlas
 
     def __init__(self, llm, pdf_path, embedder, collection, search_index):
         self.llm = llm
