@@ -19,7 +19,10 @@ slack-chat-bot/
 ├── service/
 │   ├── read_message.py          # Slack event handling and messaging
 │   ├── ai_processing.py         # Retrieval and generation logic
-│   └── text_processing.py       # Helper utilities (optional)
+│   ├── element.py               # Element class declaration
+│   ├── ai_vision.py             # Image description generation
+│   └── state.py                 # State class declaration
+├── docs/
 ├── .env                         # Environment variables (API keys, Slack tokens)
 ├── requirements.txt             # Python dependencies
 └── README.md                    # You're here!
