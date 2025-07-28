@@ -19,7 +19,10 @@ slack-chat-bot/
 ├── service/
 │   ├── read_message.py          # Slack event handling and messaging
 │   ├── ai_processing.py         # Retrieval and generation logic
-│   └── text_processing.py       # Helper utilities (optional)
+│   ├── element.py               # Element class declaration
+│   ├── ai_vision.py             # Image description generation
+│   └── state.py                 # State class declaration
+├── docs/
 ├── .env                         # Environment variables (API keys, Slack tokens)
 ├── requirements.txt             # Python dependencies
 └── README.md                    # You're here!
@@ -45,10 +48,8 @@ git clone https://github.com/your-username/slack-chat-bot.git
 cd slack-chat-bot
 ```
 
-### 2. Create .env File
+### 2. Create env file
 ``` bash 
-env file
-Copy code
 OPENAI_API_KEY=your_openai_api_key
 SLACK_BOT_TOKEN=your_slack_bot_token
 SLACK_APP_TOKEN=your_slack_app_token
