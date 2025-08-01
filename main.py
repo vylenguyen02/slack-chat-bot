@@ -1,97 +1,140 @@
 import os
-import asyncio
 from dotenv import load_dotenv
-from slack_bolt import App
-from slack_bolt.adapter.socket_mode import SocketModeHandler
-from slack_sdk import WebClient
-
-from service.read_message import read_message
-from service.ai_processing import FileHandlingService
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from pymongo import MongoClient
+from slack_sdk import WebClient
 from langchain_mongodb import MongoDBAtlasVectorSearch
 from langchain_core.messages import AIMessage
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langgraph.prebuilt import ToolNode
+from pymongo import MongoClient
+from service.text_related_processing import TextProcessing, ConversationGraphBuilder, DocProcessing
+from service.audio_processing import AudioProcessing
+from service.picture_processing import PictureProcessing
+from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_bolt import App
 
+
+import asyncio
 load_dotenv()
-# FIXED PARAM DECLATION
-# Mongo + Langchain setup
-client = MongoClient(os.environ["MONGODB_ATLAS_CLUSTER_URI"])
-db = os.environ["DB_NAME"]
-collection_name = os.environ["COLLECTION_NAME"]
-search_index = os.environ["ATLAS_VECTOR_SEARCH_INDEX_NAME"]
-collection = client[db][collection_name]
-
-# Set up embedder to embed documents
-embedder = OpenAIEmbeddings(
-    model="azure-text-embedding-3-large",
-    api_key=os.environ["OPENAI_API_KEY"],
-    base_url=os.environ["AZURE_OPENAI_ENDPOINT"]
-)
-
-# Set up GenAI 
-llm = ChatOpenAI(
-    base_url=os.environ["AZURE_OPENAI_ENDPOINT"],
-    model=os.environ["AZURE_OPENAI_COMP_DEPLOYMENT_NAME"],
-    api_key=os.environ["OPENAI_API_KEY"]
-)
-
-# Slack setup
-slack_client = WebClient(token=os.environ["BOT_USER_OAUTH_TOKEN"])
-
-# Call app to run the app with Socket Mode
 app = App(token=os.environ["SLACK_APP_TOKEN"])
 
-# process_and_respond()
-# This function acts as a main logic triggered on user message
-# param: None
-# return: 0 to stop the program
+def folder_has_any_file(pdf_path):
+        for f in os.listdir(pdf_path):
+            if os.path.isfile(os.path.join(pdf_path, f)) and not f.startswith("."):
+                return True
+        return False
+
 async def process_and_respond(user_message):
-    # Calling the class in ai_processing.py
-    self_service = FileHandlingService(llm, "docs/", embedder, collection, search_index)
+    # INSTANCE DECLARATION
+    client_mongodb = MongoClient(os.environ["MONGODB_ATLAS_CLUSTER_URI"])
+    db = os.environ["DB_NAME"]
+    collection_name = os.environ["COLLECTION_NAME"]
+    search_index = os.environ["ATLAS_VECTOR_SEARCH_INDEX_NAME"]
+    collection = client_mongodb[db][collection_name]
 
-    # Optional: Load and embed new PDFs
-    if self_service.folder_has_any_file():
-        for file in os.listdir(self_service.pdf_path):
-            # Join the file name and folder to parse.
-            new_file_path = os.path.join(self_service.pdf_path, file)
-            if os.path.isfile(new_file_path):
-                # Load file
-                docs = await self_service.loading(new_file_path)
-                # Split file
-                all_splits = self_service.splitting(docs)
-                # Embed file
-                self_service.embed_documents(all_splits, embedder, collection, search_index)
-                # Remove file so that the program does not have to load it everytime main runs.
-                # Also, remove file processsing procedure and avoid repitition.
-                os.remove(new_file_path)
+    llm = ChatOpenAI(
+        base_url=os.environ["AZURE_OPENAI_ENDPOINT"],
+        model=os.environ["AZURE_OPENAI_COMP_DEPLOYMENT_NAME"],
+        api_key=os.environ["OPENAI_API_KEY"]
+    )
 
-    # Set up vector store to help with answering questions.
-    # Using mongoDB Atlas to avoid overloading local memories 
+    embedder = OpenAIEmbeddings(
+        model="azure-text-embedding-3-large",
+        api_key=os.environ["OPENAI_API_KEY"],
+        base_url=os.environ["AZURE_OPENAI_ENDPOINT"]
+    )
+
     vectorstore = MongoDBAtlasVectorSearch(
         collection=collection,
         embedding=embedder,
         index_name=search_index,
         relevance_score_fn="cosine"
     )
-    # PART 2: TAKE USER INPUT
-    # Refer to read_message in read_message.py
-    # Return will be either be 0, if input is a picture or a string if input is a text.
-    message = read_message()
-    # PART 3: PROCESS USER INPUT 
+
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,  # chunk size (characters)
+        chunk_overlap=200,  # chunk overlap (characters)
+        add_start_index=True,  # track index in original document
+    )
+
+    pdf_path = "docs/"
+    # LOAD FILES
+    if folder_has_any_file(pdf_path):
+        for file in os.listdir(pdf_path):
+            new_file_path = os.path.join(pdf_path, file)
+            if os.path.isfile(new_file_path):
+                if "mp3" in new_file_path:
+                    audio_processing = AudioProcessing(new_file_path)
+                    transcription = audio_processing.audio_processing(file)
+                    text_loading = TextProcessing(text_splitter, embedder, collection, search_index)
+                    vectorstore = text_loading.splitting(transcription)
+                elif "pdf" in new_file_path:
+                    pdf_loading = DocProcessing(new_file_path, text_splitter, embedder, collection, search_index)
+                    vectorstore = await pdf_loading.loading(file)
+                else:
+                    print("Invalid type of file.")
+                    # Remove file so that the program does not have to load it everytime main runs.
+                    # Also, remove file processsing procedure and avoid repitition.
+            os.remove(new_file_path)
+    conversation_id = os.environ["CONVERSATION_ID"]
+    client_slack = WebClient(token=os.environ["BOT_USER_OAUTH_TOKEN"])
+
+
+    result = client_slack.conversations_history(
+            channel= conversation_id,
+            inclusive=True,
+            limit=12
+        )
+    n = 0
+    # Check if the message is sent by user
+    while n >= 0:
+        message = result["messages"][n]
+        if "user" in message:
+            break         
+        else: 
+            n -= 1    
+    message = result["messages"][n]
+
+    # check for input type
+    if message.get('files') == None: # when input is text
+        read_user_input = message.get('text') 
+
+    else:
+    # if input is file-upload-related
+        if message.get('files')[0].get('mimetype')[:5] == 'audio': # check if mimetype key is audio
+            audio_processing = AudioProcessing(message.get('files')[0].get('url_private_download'))
+            read_user_input = audio_processing.audio_download()
+            # print(transcription)
+        elif message.get('files')[0].get('mimetype')[:5] == 'image':
+            image_processing = PictureProcessing(client_slack, conversation_id, embedder, llm, message.get('text'), message.get('files')[0].get('url_private_download'))
+            image_processing.ai_vision()
+            return
+        # elif "pdf" in message.get('files')[0].get('mimetype'):
+        #     pdf_downloading = PDFDownloading(message.get('files')[0].get('url_private_download'))
+        #     doc_processing = DocProcessing("files/", text_splitter, embedder, collection, search_index)
+        #     vectorstore = await doc_processing.loading("pdf_file.pdf")
+
+        else:
+            print("File not supported.")
+            return 
+    print("a")
+    print(read_user_input)
+    print("b")
+    vectorstore = MongoDBAtlasVectorSearch(
+            collection=collection,
+            embedding=embedder,
+            index_name=search_index,
+            relevance_score_fn="cosine"
+        )
+    self_service = ConversationGraphBuilder(llm)
+
     tools = ToolNode([self_service.make_retrieve(vectorstore)])
-    # Check if input is a picture, stop the program.
-    if message == 0:
-        return 0
-    
-    # PART 3: PROCESS USER INPUT 
-    # Create a tool node that wraps the document retrieval function.
-    # The retrieval function is generated by self_service.make_retrieve(vectorstore), which likely returns a tool that performs semantic search from the vector store.
-    graph = self_service.graph_building(tools, vectorstore)
-    # Start streaming the processing of a user message through the graph.
-    # It takes a dictionary with a list of messages, starting with the user message.
+    graph = self_service.graph_building(vectorstore, tools)
+        # Start streaming the processing of a user message through the graph.
+        # It takes a dictionary with a list of messages, starting with the user message.
     for step in graph.stream(
-    {"messages": [{"role": "user", "content": message}]},
+    {"messages": [{"role": "user", "content": read_user_input}]},
     stream_mode="values",   # This mode yields only the values (not full metadata).
     ):
         # For each step output, look for messages returned by tools or the AI.
@@ -104,13 +147,14 @@ async def process_and_respond(user_message):
     hello = final_answer
 
     # Post message in slack
-    response = slack_client.chat_postMessage(
+    response = client_slack.chat_postMessage(
         channel="#general",
         text=hello
     )
-
+    print(response)
+    # client_mongodb.drop_database(db)
     return 0
-# Event listener for Slack messages
+
 @app.event("message")
 
 # handle_message_events

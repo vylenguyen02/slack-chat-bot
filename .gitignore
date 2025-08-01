@@ -6,3 +6,4 @@ bin
 etc
 lib
 __pycache__
+test.ipynb
